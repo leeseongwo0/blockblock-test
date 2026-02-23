@@ -1,0 +1,107 @@
+:root {
+  font-family: 'IBM Plex Sans', 'Pretendard', sans-serif;
+  color: #0f172a;
+  background: radial-gradient(circle at top, #dbeafe, #f8fafc 45%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 16px 48px;
+  display: grid;
+  gap: 16px;
+}
+
+.hero,
+.panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.tag {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: #bfdbfe;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+.description {
+  margin: 0 0 16px;
+  color: #334155;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+input {
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #94a3b8;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+button {
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.success {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #dcfce7;
+  border: 1px solid #22c55e;
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 26px;
+  }
+
+  .hero,
+  .panel {
+    padding: 16px;
+  }
+}
