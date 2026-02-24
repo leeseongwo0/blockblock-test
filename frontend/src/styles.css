@@ -76,6 +76,7 @@ button {
   font-weight: 600;
   cursor: pointer;
   width: 100%;
+  margin-bottom: 10px;
 }
 
 button:disabled {
@@ -93,6 +94,19 @@ button:disabled {
   border-radius: 8px;
   background: #dcfce7;
   border: 1px solid #22c55e;
+}
+
+.helper {
+  color: #1e293b;
+}
+
+.preview-image {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #94a3b8;
+  margin-bottom: 12px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
 }
 
 @media (max-width: 640px) {

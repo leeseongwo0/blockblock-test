@@ -6,6 +6,12 @@ export type SponsoredMintResponse = {
   gasOwner: string;
 };
 
+export type GeneratedImageResponse = {
+  keyword: string;
+  nftName: string;
+  imageUrl: string;
+};
+
 export async function requestSponsoredMint(params: {
   sender: string;
   name?: string;
@@ -25,4 +31,23 @@ export async function requestSponsoredMint(params: {
   }
 
   return (await response.json()) as SponsoredMintResponse;
+}
+
+export async function requestGeneratedImage(params: {
+  keyword: string;
+}): Promise<GeneratedImageResponse> {
+  const response = await fetch(`${backendUrl}/api/image/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Image API error (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as GeneratedImageResponse;
 }

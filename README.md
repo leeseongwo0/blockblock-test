@@ -4,6 +4,7 @@ Sui Testnet 부스용 웹앱입니다.
 
 기능:
 - Slush 지갑 기반 Web3 로그인(지갑 연결)
+- 키워드 기반 NFT 이미지 생성(데모 SVG)
 - NFT 민팅 버튼
 - 가스비 대납(Sponsored Transaction)
 
@@ -58,6 +59,11 @@ cp .env.example .env
 선택 값:
 - `SUI_RPC_URL`: 기본 testnet fullnode URL
 - `ALLOWED_ORIGINS`: 프론트 도메인 (콤마 구분)
+- `PUBLIC_BASE_URL`: 프록시/CDN 뒤 배포 시 이미지 URL 생성용 공개 베이스 URL
+- `S3_BUCKET_NAME`: 설정 시 키워드 SVG를 S3에 업로드
+- `S3_REGION`: S3 버킷 리전 (또는 `AWS_REGION`)
+- `S3_PUBLIC_BASE_URL`: S3/CloudFront 공개 베이스 URL (미설정 시 S3 기본 URL 사용)
+- `S3_OBJECT_PREFIX`: 업로드 오브젝트 prefix (기본 `generated`)
 - `DEFAULT_NFT_NAME`, `DEFAULT_NFT_IMAGE_URL`
 - `TRUST_PROXY`: 리버스 프록시 뒤 배포 시 `true` 권장
 - `RATE_LIMIT_GLOBAL_PER_MINUTE`: 전역 요청 제한 (기본 300)
@@ -106,6 +112,34 @@ npm run dev
 
 ## API
 
+### `POST /api/image/generate`
+
+요청:
+
+```json
+{
+  "keyword": "neon tiger"
+}
+```
+
+응답:
+
+```json
+{
+  "keyword": "neon tiger",
+  "nftName": "neon tiger Booth NFT",
+  "imageUrl": "https://<your-cdn-or-s3>/generated/20260224/...svg"
+}
+```
+
+- `S3_BUCKET_NAME` 설정 시 SVG를 S3에 저장하고 공개 URL을 반환합니다.
+- S3 미설정 시 기존처럼 `/api/image/render?keyword=...` 동적 URL을 반환합니다.
+
+### `GET /api/image/render?keyword=...`
+
+- `keyword`를 기반으로 SVG 이미지를 동적으로 렌더링합니다.
+- `POST /api/image/generate`가 반환한 `imageUrl`로 바로 사용 가능합니다.
+
 ### `POST /api/sponsor/mint`
 
 요청:
@@ -114,9 +148,12 @@ npm run dev
 {
   "sender": "0x...",
   "name": "BlockBlock Booth NFT",
-  "imageUrl": "https://..."
+  "imageUrl": "https://...",
+  "keyword": "neon tiger"
 }
 ```
+
+- `keyword`를 보내면 서버가 이미지를 생성해(S3 설정 시 업로드) 해당 URL로 민팅 트랜잭션을 만듭니다.
 
 응답:
 

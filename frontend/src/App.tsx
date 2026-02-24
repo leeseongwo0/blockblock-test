@@ -6,12 +6,18 @@ import {
   useSuiClient,
   useSuiClientContext,
 } from '@mysten/dapp-kit';
-import { requestSponsoredMint } from './api';
+import { requestGeneratedImage, requestSponsoredMint } from './api';
 
 type MintState =
   | { kind: 'idle' }
   | { kind: 'loading'; message: string }
   | { kind: 'success'; digest: string; objectId?: string }
+  | { kind: 'error'; message: string };
+
+type ImageState =
+  | { kind: 'idle' }
+  | { kind: 'loading'; message: string }
+  | { kind: 'success'; imageUrl: string }
   | { kind: 'error'; message: string };
 
 function toUserMessage(error: unknown): string {
@@ -29,21 +35,63 @@ function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function compactText(input: string): string {
+  return input.trim().replace(/\s+/g, ' ');
+}
+
 export default function App() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { network: currentNetwork } = useSuiClientContext();
   const { mutateAsync: signTransaction } = useSignTransaction();
 
+  const [keyword, setKeyword] = useState('');
   const [mintName, setMintName] = useState('BlockBlock Booth NFT');
   const [mintImageUrl, setMintImageUrl] = useState(
     'https://placehold.co/1024x1024/png?text=BlockBlock+Booth',
   );
+  const [imageState, setImageState] = useState<ImageState>({ kind: 'idle' });
   const [mintState, setMintState] = useState<MintState>({ kind: 'idle' });
 
   const canMint = useMemo(() => {
     return Boolean(account?.address) && mintState.kind !== 'loading';
   }, [account?.address, mintState.kind]);
+
+  const canGenerateImage = useMemo(() => {
+    return compactText(keyword).length > 0 && imageState.kind !== 'loading';
+  }, [keyword, imageState.kind]);
+
+  const generateImageFromKeyword = async (rawKeyword: string) => {
+    const normalizedKeyword = compactText(rawKeyword);
+    if (!normalizedKeyword) {
+      throw new Error('키워드를 입력해 주세요.');
+    }
+
+    setImageState({ kind: 'loading', message: '키워드로 이미지 생성 중...' });
+    const generated = await requestGeneratedImage({
+      keyword: normalizedKeyword,
+    });
+    setMintImageUrl(generated.imageUrl);
+    if (!compactText(mintName)) {
+      setMintName(generated.nftName);
+    }
+    setImageState({
+      kind: 'success',
+      imageUrl: generated.imageUrl,
+    });
+    return generated;
+  };
+
+  const onClickGenerateImage = async () => {
+    try {
+      await generateImageFromKeyword(keyword);
+    } catch (error) {
+      setImageState({
+        kind: 'error',
+        message: toUserMessage(error),
+      });
+    }
+  };
 
   const onClickMint = async () => {
     if (!account?.address) {
@@ -52,11 +100,28 @@ export default function App() {
     }
 
     try {
+      const normalizedKeyword = compactText(keyword);
+      let finalMintName = compactText(mintName);
+      let finalMintImageUrl = mintImageUrl.trim();
+
+      if (normalizedKeyword) {
+        setMintState({
+          kind: 'loading',
+          message: '키워드 기반 이미지 생성 중...',
+        });
+        const generated = await generateImageFromKeyword(normalizedKeyword);
+        finalMintImageUrl = generated.imageUrl;
+        if (!finalMintName) {
+          finalMintName = generated.nftName;
+          setMintName(generated.nftName);
+        }
+      }
+
       setMintState({ kind: 'loading', message: '가스비 대납 트랜잭션 생성 중...' });
       const sponsored = await requestSponsoredMint({
         sender: account.address,
-        name: mintName,
-        imageUrl: mintImageUrl,
+        name: finalMintName || undefined,
+        imageUrl: finalMintImageUrl || undefined,
       });
 
       setMintState({ kind: 'loading', message: '지갑 서명 요청 중...' });
@@ -124,6 +189,23 @@ export default function App() {
       <section className="panel">
         <h2>2) NFT 민팅</h2>
         <label>
+          생성 키워드
+          <input
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            maxLength={40}
+            placeholder="예: cyber tiger, neon city, hanbok robot"
+          />
+        </label>
+        <button onClick={onClickGenerateImage} disabled={!canGenerateImage}>
+          키워드로 이미지 생성
+        </button>
+        {imageState.kind === 'loading' && <p>{imageState.message}</p>}
+        {imageState.kind === 'error' && <p className="error">{imageState.message}</p>}
+        {imageState.kind === 'success' && (
+          <p className="helper">이미지 생성 완료. 아래 URL로 민팅됩니다.</p>
+        )}
+        <label>
           NFT 이름
           <input
             value={mintName}
@@ -138,8 +220,11 @@ export default function App() {
             onChange={(event) => setMintImageUrl(event.target.value)}
           />
         </label>
+        {mintImageUrl && (
+          <img className="preview-image" src={mintImageUrl} alt="NFT preview" />
+        )}
         <button onClick={onClickMint} disabled={!canMint}>
-          3) 가스비 대납으로 민팅하기
+          3) 키워드 이미지 + 가스비 대납으로 민팅하기
         </button>
 
         {mintState.kind === 'loading' && <p>{mintState.message}</p>}

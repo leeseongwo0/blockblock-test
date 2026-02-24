@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { z } from 'zod';
@@ -9,6 +9,12 @@ import { Transaction } from '@mysten/sui/transactions';
 import { fromBase64, toBase64 } from '@mysten/sui/utils';
 import { getConfig } from './config.js';
 import { FixedWindowLimiter } from './limiter.js';
+import { S3ImageStore } from './s3.js';
+import {
+  keywordToNftName,
+  normalizeKeyword,
+  renderKeywordSvg,
+} from './image.js';
 
 const addressSchema = z
   .string()
@@ -18,6 +24,11 @@ const mintRequestSchema = z.object({
   sender: addressSchema,
   name: z.string().trim().min(1).max(48).optional(),
   imageUrl: z.string().trim().url().max(512).optional(),
+  keyword: z.string().trim().min(1).max(40).optional(),
+});
+
+const keywordImageSchema = z.object({
+  keyword: z.string().trim().min(1).max(40),
 });
 
 const config = getConfig();
@@ -34,6 +45,21 @@ const client = new SuiJsonRpcClient({
 });
 const ipLimiter = new FixedWindowLimiter();
 const senderLimiter = new FixedWindowLimiter();
+const s3ImageStore =
+  config.s3BucketName && config.s3Region
+    ? new S3ImageStore({
+        bucketName: config.s3BucketName,
+        region: config.s3Region,
+        objectPrefix: config.s3ObjectPrefix,
+        publicBaseUrl: config.s3PublicBaseUrl,
+      })
+    : null;
+
+type MintTxInput = {
+  sender: string;
+  name?: string;
+  imageUrl?: string;
+};
 
 function toBytes(input: Uint8Array | string): Uint8Array {
   return typeof input === 'string' ? fromBase64(input) : input;
@@ -41,6 +67,23 @@ function toBytes(input: Uint8Array | string): Uint8Array {
 
 function toB64(input: Uint8Array | string): string {
   return typeof input === 'string' ? input : toBase64(input);
+}
+
+function resolvePublicBaseUrl(request: FastifyRequest): string {
+  if (config.publicBaseUrl) {
+    return config.publicBaseUrl;
+  }
+
+  const forwardedHost = request.headers['x-forwarded-host'];
+  const hostHeader =
+    typeof forwardedHost === 'string' ? forwardedHost : request.headers.host;
+  const forwardedProto = request.headers['x-forwarded-proto'];
+  const protoHeader =
+    typeof forwardedProto === 'string' ? forwardedProto : request.protocol;
+  const protocol = protoHeader?.split(',')[0]?.trim() || 'http';
+  const host = hostHeader?.split(',')[0]?.trim() || `localhost:${config.port}`;
+
+  return `${protocol}://${host}`;
 }
 
 async function getGasPayment() {
@@ -66,7 +109,26 @@ async function getGasPayment() {
   ];
 }
 
-async function buildSponsoredMintTx(input: z.infer<typeof mintRequestSchema>) {
+async function resolveKeywordImage(keyword: string, request: FastifyRequest) {
+  const svg = renderKeywordSvg(keyword);
+  if (s3ImageStore) {
+    const imageUrl = await s3ImageStore.uploadKeywordSvg(keyword, svg);
+    return {
+      keyword,
+      nftName: keywordToNftName(keyword),
+      imageUrl,
+    };
+  }
+
+  const baseUrl = resolvePublicBaseUrl(request);
+  return {
+    keyword,
+    nftName: keywordToNftName(keyword),
+    imageUrl: `${baseUrl}/api/image/render?keyword=${encodeURIComponent(keyword)}`,
+  };
+}
+
+async function buildSponsoredMintTx(input: MintTxInput) {
   const mintTx = new Transaction();
   mintTx.moveCall({
     target: `${config.packageId}::booth_nft::mint`,
@@ -133,6 +195,48 @@ async function main() {
     };
   });
 
+  app.post('/api/image/generate', async (request, reply) => {
+    const parsed = keywordImageSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: 'Invalid request body',
+        issues: parsed.error.issues,
+      };
+    }
+
+    try {
+      const keyword = normalizeKeyword(parsed.data.keyword);
+      return await resolveKeywordImage(keyword, request);
+    } catch (error) {
+      request.log.error({ error }, 'Failed to generate keyword image');
+      reply.code(500);
+      return {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  });
+
+  app.get('/api/image/render', async (request, reply) => {
+    const parsed = keywordImageSchema.safeParse(request.query);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: 'Invalid query',
+        issues: parsed.error.issues,
+      };
+    }
+
+    const keyword = normalizeKeyword(parsed.data.keyword);
+    const svg = renderKeywordSvg(keyword);
+
+    reply
+      .header('Content-Type', 'image/svg+xml; charset=utf-8')
+      .header('Cache-Control', 'public, max-age=60');
+
+    return svg;
+  });
+
   app.post('/api/sponsor/mint', async (request, reply) => {
     const ipLimit = ipLimiter.consume(`ip:${request.ip}`, config.ipLimitPerMinute, 60_000);
     if (!ipLimit.allowed) {
@@ -166,7 +270,22 @@ async function main() {
     }
 
     try {
-      const sponsored = await buildSponsoredMintTx(parsed.data);
+      const mintInput: MintTxInput = {
+        sender: parsed.data.sender,
+        name: parsed.data.name,
+        imageUrl: parsed.data.imageUrl,
+      };
+
+      if (parsed.data.keyword) {
+        const keyword = normalizeKeyword(parsed.data.keyword);
+        const generated = await resolveKeywordImage(keyword, request);
+        mintInput.imageUrl = generated.imageUrl;
+        if (!mintInput.name) {
+          mintInput.name = generated.nftName;
+        }
+      }
+
+      const sponsored = await buildSponsoredMintTx(mintInput);
       return {
         ...sponsored,
         gasOwner: sponsorAddress,
