@@ -23,24 +23,29 @@ export class S3ImageStore {
       `https://${config.bucketName}.s3.${config.region}.amazonaws.com`;
   }
 
-  private buildObjectKey(keyword: string): string {
+  private buildObjectKey(keyword: string, extension: string): string {
     const datePart = new Date().toISOString().slice(0, 10).replaceAll('-', '');
     const hashPart = createHash('sha256')
       .update(keyword.toLowerCase())
       .digest('hex')
       .slice(0, 12);
-    return `${this.objectPrefix}/${datePart}/${hashPart}-${randomUUID()}.svg`;
+    return `${this.objectPrefix}/${datePart}/${hashPart}-${randomUUID()}.${extension}`;
   }
 
-  async uploadKeywordSvg(keyword: string, svgContent: string): Promise<string> {
-    const key = this.buildObjectKey(keyword);
+  async uploadKeywordImage(params: {
+    keyword: string;
+    content: Buffer;
+    contentType: string;
+    extension: 'png' | 'svg';
+  }): Promise<string> {
+    const key = this.buildObjectKey(params.keyword, params.extension);
 
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucketName,
         Key: key,
-        Body: svgContent,
-        ContentType: 'image/svg+xml; charset=utf-8',
+        Body: params.content,
+        ContentType: params.contentType,
         CacheControl: 'public, max-age=31536000, immutable',
       }),
     );

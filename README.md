@@ -4,7 +4,7 @@ Sui Testnet 부스용 웹앱입니다.
 
 기능:
 - Slush 지갑 기반 Web3 로그인(지갑 연결)
-- 키워드 기반 NFT 이미지 생성(데모 SVG)
+- 키워드 기반 픽셀 코인 PNG 생성
 - NFT 민팅 버튼
 - 가스비 대납(Sponsored Transaction)
 
@@ -137,7 +137,8 @@ npm run dev
 
 ### `GET /api/image/render?keyword=...`
 
-- `keyword`를 기반으로 SVG 이미지를 동적으로 렌더링합니다.
+- `keyword`를 기반으로 픽셀 코인 PNG 이미지를 동적으로 렌더링합니다.
+- 기본 배경은 흰색이며, 코인 베이스/스타일 레퍼런스는 `assets/coin`, `assets/coin_examples`를 사용합니다.
 - `POST /api/image/generate`가 반환한 `imageUrl`로 바로 사용 가능합니다.
 
 ### `POST /api/sponsor/mint`

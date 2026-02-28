@@ -13,7 +13,7 @@ import { S3ImageStore } from './s3.js';
 import {
   keywordToNftName,
   normalizeKeyword,
-  renderKeywordSvg,
+  renderKeywordCoinPng,
 } from './image.js';
 
 const addressSchema = z
@@ -110,9 +110,14 @@ async function getGasPayment() {
 }
 
 async function resolveKeywordImage(keyword: string, request: FastifyRequest) {
-  const svg = renderKeywordSvg(keyword);
+  const png = await renderKeywordCoinPng(keyword);
   if (s3ImageStore) {
-    const imageUrl = await s3ImageStore.uploadKeywordSvg(keyword, svg);
+    const imageUrl = await s3ImageStore.uploadKeywordImage({
+      keyword,
+      content: png,
+      contentType: 'image/png',
+      extension: 'png',
+    });
     return {
       keyword,
       nftName: keywordToNftName(keyword),
@@ -228,13 +233,13 @@ async function main() {
     }
 
     const keyword = normalizeKeyword(parsed.data.keyword);
-    const svg = renderKeywordSvg(keyword);
+    const png = await renderKeywordCoinPng(keyword);
 
     reply
-      .header('Content-Type', 'image/svg+xml; charset=utf-8')
+      .header('Content-Type', 'image/png')
       .header('Cache-Control', 'public, max-age=60');
 
-    return svg;
+    return png;
   });
 
   app.post('/api/sponsor/mint', async (request, reply) => {
